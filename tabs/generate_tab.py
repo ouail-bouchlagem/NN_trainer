@@ -7,10 +7,10 @@ from classes.image import Image
 
 
 class GenerateTab(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, app_state, parent=None):
         super().__init__(parent)
+        self.app_state = app_state
         self.dataset = []
-        self.datasets = []
 
         title = QtWidgets.QLabel("Generate Data")
         title.setStyleSheet("font-size: 20px; font-weight: 600;")
@@ -49,6 +49,8 @@ class GenerateTab(QtWidgets.QWidget):
             "border-radius: 8px; color: #cfd6e6;"
         )
         self.datasets_list.currentRowChanged.connect(self._on_dataset_selected)
+        self.app_state.datasets_changed.connect(self._refresh_datasets_list)
+        self.app_state.active_dataset_changed.connect(self._on_active_dataset_changed)
 
         left_col = QtWidgets.QVBoxLayout()
         left_col.addWidget(title)
@@ -109,9 +111,23 @@ class GenerateTab(QtWidgets.QWidget):
             )
             return
 
-        preview = []
-        self.dataset = []
-        labels = [1] * count_x + [0] * count_o
+        preview = self._show_preview_popup()
+        if preview is None:
+            self.status_label.setText("Preview cancelled.")
+            return
+
+        preview_x = sum(1 for item in preview if item["label"] == 1)
+        preview_o = sum(1 for item in preview if item["label"] == 0)
+        remaining_x = count_x - preview_x
+        remaining_o = count_o - preview_o
+        if remaining_x < 0 or remaining_o < 0:
+            self.status_label.setText(
+                "Preview exceeded target counts. Adjust count or percentage."
+            )
+            return
+
+        self.dataset = list(preview)
+        labels = [1] * remaining_x + [0] * remaining_o
         random.shuffle(labels)
         for label in labels:
             image = Image(size=40)
@@ -122,23 +138,11 @@ class GenerateTab(QtWidgets.QWidget):
             record = {"pixels": np.array(image.pixels).flatten(), "label": label}
             self.dataset.append(record)
 
-        preview_x = 0
-        preview_o = 0
-        for record in self.dataset:
-            if record["label"] == 1 and preview_x < 2:
-                preview.append(record)
-                preview_x += 1
-            elif record["label"] == 0 and preview_o < 2:
-                preview.append(record)
-                preview_o += 1
-            if preview_x == 2 and preview_o == 2:
-                break
-
         self.status_label.setText(
             f"Created '{name}' with {count} items ({percent_x}% X / {100 - percent_x}% O)"
         )
         self._render_preview(preview)
-        self.datasets.append(
+        self.app_state.add_dataset(
             {
                 "name": name,
                 "count": count,
@@ -147,21 +151,31 @@ class GenerateTab(QtWidgets.QWidget):
                 "preview": preview,
             }
         )
-        self._refresh_datasets_list()
-        self.datasets_list.setCurrentRow(len(self.datasets) - 1)
 
     def _refresh_datasets_list(self):
         self.datasets_list.clear()
-        for ds in self.datasets:
+        for ds in self.app_state.datasets:
             self.datasets_list.addItem(
                 f"{ds['name']}  |  {ds['count']} items  |  X {ds['percent_x']}% / O {100 - ds['percent_x']}%"
             )
+        if self.app_state.active_dataset_index >= 0:
+            self.datasets_list.setCurrentRow(self.app_state.active_dataset_index)
 
     def _on_dataset_selected(self, row):
-        if row < 0 or row >= len(self.datasets):
+        self.app_state.set_active_dataset(row)
+
+    def _on_active_dataset_changed(self, row):
+        if row < 0 or row >= len(self.app_state.datasets):
             return
-        preview = self.datasets[row].get("preview", [])
+        preview = self.app_state.datasets[row].get("preview", [])
         self._render_preview(preview)
+
+    def _show_preview_popup(self):
+        dialog = PreviewDialog(self)
+        result = dialog.exec_()
+        if result == QtWidgets.QDialog.Accepted:
+            return dialog.preview
+        return None
 
     def _render_preview(self, preview):
         for i, label in enumerate(self.preview_labels):
@@ -195,5 +209,123 @@ class GenerateTab(QtWidgets.QWidget):
         painter.setPen(QtGui.QColor(220, 230, 240))
         painter.setFont(QtGui.QFont("Segoe UI", 10, QtGui.QFont.Bold))
         painter.drawText(8, pixmap.height() - 8, f"Label: {label}")
+        painter.end()
+        return overlay
+
+
+class PreviewDialog(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Creating Samples")
+        self.setModal(True)
+        self.resize(520, 420)
+
+        self.preview = []
+        self._queue = [1, 1, 0, 0]
+        random.shuffle(self._queue)
+        self._items = []
+        for label_value in self._queue:
+            image = Image(size=40)
+            generator = image.iter_draw_x() if label_value == 1 else image.iter_draw_o()
+            self._items.append(
+                {"image": image, "label": label_value, "generator": generator}
+            )
+
+        title = QtWidgets.QLabel("Generating 2 X and 2 O samples...")
+        title.setStyleSheet("font-size: 16px; font-weight: 600;")
+        subtitle = QtWidgets.QLabel("Watch the preview update in real time.")
+        subtitle.setStyleSheet("color: #9aa3ba;")
+
+        grid = QtWidgets.QGridLayout()
+        grid.setSpacing(12)
+        self.labels = []
+        for r in range(2):
+            for c in range(2):
+                label = QtWidgets.QLabel("...")
+                label.setAlignment(QtCore.Qt.AlignCenter)
+                label.setFixedSize(200, 160)
+                label.setStyleSheet(
+                    "background-color: #1f2430; border: 1px solid #3a4258; "
+                    "border-radius: 8px; color: #8a93a8;"
+                )
+                grid.addWidget(label, r, c)
+                self.labels.append(label)
+
+        self.progress_label = QtWidgets.QLabel("0 / 4")
+        self.progress_label.setStyleSheet("color: #9aa3ba;")
+
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(cancel_btn)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addSpacing(8)
+        layout.addLayout(grid)
+        layout.addSpacing(8)
+        layout.addWidget(self.progress_label)
+        layout.addLayout(buttons)
+
+        self._step_index = 0
+        self._timer = QtCore.QTimer(self)
+        self._timer.timeout.connect(self._step)
+        self._timer.start(20)
+
+    def _step(self):
+        if self._step_index >= len(self._items):
+            self._timer.stop()
+            self.accept()
+            return
+
+        item = self._items[self._step_index]
+        try:
+            next(item["generator"])
+            self._update_label(self._step_index, item)
+        except StopIteration:
+            record = {
+                "pixels": np.array(item["image"].pixels).flatten(),
+                "label": item["label"],
+            }
+            self.preview.append(record)
+            self._update_label(self._step_index, item, final=True)
+            self._step_index += 1
+            self.progress_label.setText(f"{self._step_index} / 4")
+            if self._step_index >= len(self._items):
+                self._timer.stop()
+                self.accept()
+
+    def _update_label(self, index, item, final=False):
+        pixmap = self._pixels_to_pixmap(item["image"].pixels, item["label"])
+        self.labels[index].setPixmap(pixmap)
+        self.labels[index].setAlignment(QtCore.Qt.AlignCenter)
+
+    def _pixels_to_pixmap(self, pixels, label_value):
+        data = np.array(pixels, dtype=np.uint8)
+        if data.ndim == 2:
+            size = data.shape[0]
+        else:
+            size = int(np.sqrt(data.size))
+            data = data.reshape((size, size))
+        image = QtGui.QImage(
+            data.data, size, size, size, QtGui.QImage.Format_Grayscale8
+        )
+        image = image.copy()
+        pixmap = QtGui.QPixmap.fromImage(image)
+        pixmap = pixmap.scaled(
+            180, 140, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+        )
+
+        label = "X" if label_value == 1 else "O"
+        overlay = QtGui.QPixmap(pixmap.size())
+        overlay.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(overlay)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setPen(QtGui.QColor(220, 230, 240))
+        painter.setFont(QtGui.QFont("Segoe UI", 9, QtGui.QFont.Bold))
+        painter.drawText(6, pixmap.height() - 6, f"Label: {label}")
         painter.end()
         return overlay

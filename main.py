@@ -2,6 +2,7 @@ import sys
 
 from PyQt5 import QtGui, QtWidgets
 
+from classes.app_state import AppState
 from tabs.generate_tab import GenerateTab
 from tabs.learning_tab import LearningTab
 from tabs.testing_tab import TestingTab
@@ -13,10 +14,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("Perceptron Trainer")
         self.resize(1200, 720)
 
+        self.app_state = AppState(self)
         tabs = QtWidgets.QTabWidget()
-        tabs.addTab(GenerateTab(), "Generate Data")
-        tabs.addTab(LearningTab(), "Learning")
-        tabs.addTab(TestingTab(), "Testing")
+        tabs.addTab(GenerateTab(self.app_state), "Generate Data")
+        tabs.addTab(LearningTab(self.app_state), "Learning")
+        tabs.addTab(TestingTab(self.app_state), "Testing")
 
         self.setCentralWidget(tabs)
 

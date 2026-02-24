@@ -14,11 +14,15 @@ class Image:
         self.pixels = [[0 for _ in range(size)] for _ in range(size)]
 
     def draw_x(self):
+        for _ in self.iter_draw_x():
+            sleep(sleep_time)
+
+    def iter_draw_x(self):
         top, left, bottom, right = self.top(), self.left(), self.bottom(), self.right()
         current_point = bottom, left
         while current_point[0] > top and current_point[1] < right:
-            sleep(sleep_time)
             self.draw_point(*current_point)
+            yield
             direction = (
                 (top - current_point[0]),
                 (right - current_point[1]),
@@ -41,8 +45,8 @@ class Image:
 
         current_point = top, left
         while current_point[0] < bottom and current_point[1] < right:
-            sleep(sleep_time)
             self.draw_point(*current_point)
+            yield
             direction = (
                 (bottom - current_point[0]),
                 (right - current_point[1]),
@@ -69,20 +73,24 @@ class Image:
         return -x / (1 - x**2) ** 0.5
 
     def draw_o(self):
+        for _ in self.iter_draw_o():
+            sleep(sleep_time)
+
+    def iter_draw_o(self):
         top, left, bottom, right = self.top(), self.left(), self.bottom(), self.right()
         center = (round((top + bottom) / 2), round((left + right) / 2))
 
         radius = min((bottom - top), (right - left)) / 2
         noise = random.uniform(-1, 1) * self.brush_size
         circumference = 2 * 3.14 * radius
-        step_size = int(self.brush_size / circumference * 360) + random.randint(-1, 1)
+        step_size = int((self.brush_size / circumference * 360) / 2)
         for angle in range(0, 360, step_size):
-            sleep(sleep_time)
             rad = angle * (3.14 / 180)
             x = center[0] + radius * np.cos(rad) + noise
             y = center[1] + radius * np.sin(rad) + noise
             self.draw_point(round(x), round(y))
-            noise += random.uniform(-0.5, 0.5)
+            yield
+            noise += random.uniform(-0.02 * self.size, 0.02 * self.size)
             if noise > self.brush_size:
                 noise = self.brush_size
             if noise < -self.brush_size:

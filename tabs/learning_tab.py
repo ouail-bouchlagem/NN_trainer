@@ -2,12 +2,18 @@ from PyQt5 import QtCore, QtWidgets
 
 
 class LearningTab(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, app_state, parent=None):
         super().__init__(parent)
+        self.app_state = app_state
         title = QtWidgets.QLabel("Learning")
         title.setStyleSheet("font-size: 20px; font-weight: 600;")
         subtitle = QtWidgets.QLabel("Train perceptron in real time.")
         subtitle.setStyleSheet("color: #a8b0c4;")
+
+        self.datasets_count_label = QtWidgets.QLabel("Datasets available: 0")
+        self.datasets_count_label.setStyleSheet("color: #cfd6e6;")
+        self.active_dataset_label = QtWidgets.QLabel("Selected dataset: none")
+        self.active_dataset_label.setStyleSheet("color: #cfd6e6;")
 
         placeholder = QtWidgets.QLabel("Training controls will be placed here.")
         placeholder.setAlignment(QtCore.Qt.AlignCenter)
@@ -19,5 +25,21 @@ class LearningTab(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(title)
         layout.addWidget(subtitle)
+        layout.addSpacing(8)
+        layout.addWidget(self.datasets_count_label)
+        layout.addWidget(self.active_dataset_label)
         layout.addSpacing(12)
         layout.addWidget(placeholder, 1)
+
+        self.app_state.datasets_changed.connect(self._refresh_dataset_info)
+        self.app_state.active_dataset_changed.connect(self._refresh_dataset_info)
+        self._refresh_dataset_info()
+
+    def _refresh_dataset_info(self, *_):
+        count = len(self.app_state.datasets)
+        self.datasets_count_label.setText(f"Datasets available: {count}")
+        active = self.app_state.get_active_dataset()
+        if active is None:
+            self.active_dataset_label.setText("Selected dataset: none")
+        else:
+            self.active_dataset_label.setText(f"Selected dataset: {active['name']}")
