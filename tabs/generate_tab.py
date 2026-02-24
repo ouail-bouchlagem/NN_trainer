@@ -97,21 +97,42 @@ class GenerateTab(QtWidgets.QWidget):
         count = int(self.count_input.value())
         percent_x = int(self.percent_x_input.value())
 
+        if count < 4:
+            self.status_label.setText("Minimum dataset size is 4 (2 X and 2 O).")
+            return
+
+        count_x = int(round(count * (percent_x / 100.0)))
+        count_o = count - count_x
+        if count_x < 2 or count_o < 2:
+            self.status_label.setText(
+                "Need at least 2 X and 2 O. Adjust count or percentage."
+            )
+            return
+
         preview = []
         self.dataset = []
-        for _ in range(count):
+        labels = [1] * count_x + [0] * count_o
+        random.shuffle(labels)
+        for label in labels:
             image = Image(size=40)
-            is_x = random.random() < (percent_x / 100.0)
-            if is_x:
+            if label == 1:
                 image.draw_x()
-                label = 1
             else:
                 image.draw_o()
-                label = 0
             record = {"pixels": np.array(image.pixels).flatten(), "label": label}
             self.dataset.append(record)
-            if len(preview) < 4:
+
+        preview_x = 0
+        preview_o = 0
+        for record in self.dataset:
+            if record["label"] == 1 and preview_x < 2:
                 preview.append(record)
+                preview_x += 1
+            elif record["label"] == 0 and preview_o < 2:
+                preview.append(record)
+                preview_o += 1
+            if preview_x == 2 and preview_o == 2:
+                break
 
         self.status_label.setText(
             f"Created '{name}' with {count} items ({percent_x}% X / {100 - percent_x}% O)"
