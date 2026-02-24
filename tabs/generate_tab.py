@@ -10,6 +10,7 @@ class GenerateTab(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.dataset = []
+        self.datasets = []
 
         title = QtWidgets.QLabel("Generate Data")
         title.setStyleSheet("font-size: 20px; font-weight: 600;")
@@ -39,6 +40,16 @@ class GenerateTab(QtWidgets.QWidget):
         self.status_label = QtWidgets.QLabel("Ready")
         self.status_label.setStyleSheet("color: #9aa3ba;")
 
+        self.datasets_label = QtWidgets.QLabel("Created datasets")
+        self.datasets_label.setStyleSheet("font-size: 14px; font-weight: 600;")
+        self.datasets_list = QtWidgets.QListWidget()
+        self.datasets_list.setFixedHeight(140)
+        self.datasets_list.setStyleSheet(
+            "background-color: #1f2430; border: 1px solid #3a4258; "
+            "border-radius: 8px; color: #cfd6e6;"
+        )
+        self.datasets_list.currentRowChanged.connect(self._on_dataset_selected)
+
         left_col = QtWidgets.QVBoxLayout()
         left_col.addWidget(title)
         left_col.addWidget(subtitle)
@@ -48,6 +59,10 @@ class GenerateTab(QtWidgets.QWidget):
         left_col.addWidget(self.generate_button)
         left_col.addSpacing(6)
         left_col.addWidget(self.status_label)
+        left_col.addSpacing(10)
+        left_col.addWidget(self.datasets_label)
+        left_col.addSpacing(6)
+        left_col.addWidget(self.datasets_list)
         left_col.addStretch(1)
 
         preview_title = QtWidgets.QLabel("Preview (first 4)")
@@ -101,6 +116,30 @@ class GenerateTab(QtWidgets.QWidget):
         self.status_label.setText(
             f"Created '{name}' with {count} items ({percent_x}% X / {100 - percent_x}% O)"
         )
+        self._render_preview(preview)
+        self.datasets.append(
+            {
+                "name": name,
+                "count": count,
+                "percent_x": percent_x,
+                "data": self.dataset,
+                "preview": preview,
+            }
+        )
+        self._refresh_datasets_list()
+        self.datasets_list.setCurrentRow(len(self.datasets) - 1)
+
+    def _refresh_datasets_list(self):
+        self.datasets_list.clear()
+        for ds in self.datasets:
+            self.datasets_list.addItem(
+                f"{ds['name']}  |  {ds['count']} items  |  X {ds['percent_x']}% / O {100 - ds['percent_x']}%"
+            )
+
+    def _on_dataset_selected(self, row):
+        if row < 0 or row >= len(self.datasets):
+            return
+        preview = self.datasets[row].get("preview", [])
         self._render_preview(preview)
 
     def _render_preview(self, preview):
