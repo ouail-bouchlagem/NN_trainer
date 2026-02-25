@@ -36,6 +36,9 @@ class LearningTab(QtWidgets.QWidget):
         self.epochs_input = QtWidgets.QSpinBox()
         self.epochs_input.setRange(1, 100000)
         self.epochs_input.setValue(5)
+        self.images_per_second_input = QtWidgets.QSpinBox()
+        self.images_per_second_input.setRange(1, 1000)
+        self.images_per_second_input.setValue(50)
 
         self.start_button = QtWidgets.QPushButton("Start Learning")
         self.start_button.clicked.connect(self._start_learning)
@@ -43,6 +46,8 @@ class LearningTab(QtWidgets.QWidget):
         controls = QtWidgets.QHBoxLayout()
         controls.addWidget(QtWidgets.QLabel("Epochs:"))
         controls.addWidget(self.epochs_input)
+        controls.addWidget(QtWidgets.QLabel("Images / second:"))
+        controls.addWidget(self.images_per_second_input)
         controls.addWidget(self.start_button)
         controls.addStretch(1)
 
@@ -137,13 +142,18 @@ class LearningTab(QtWidgets.QWidget):
         self.total_steps = len(self.training_data) * epochs
         self.current_step = 0
         self.current_epoch = 1
+        images_per_second = int(self.images_per_second_input.value())
+        interval_ms = max(1, int(round(1000 / images_per_second)))
 
         self.start_button.setEnabled(False)
         self.epochs_input.setEnabled(False)
+        self.images_per_second_input.setEnabled(False)
         self.status_label.setText(
-            f"Training started: {epochs} epochs, {len(self.training_data)} images/epoch."
+            "Training started: "
+            f"{epochs} epochs, {len(self.training_data)} images/epoch, "
+            f"{images_per_second} images/second."
         )
-        self.training_timer.start(20)
+        self.training_timer.start(interval_ms)
 
     def _train_step(self):
         if self.model is None or self.current_step >= self.total_steps:
@@ -173,6 +183,7 @@ class LearningTab(QtWidgets.QWidget):
         self.training_timer.stop()
         self.start_button.setEnabled(True)
         self.epochs_input.setEnabled(True)
+        self.images_per_second_input.setEnabled(True)
         if self.total_steps > 0 and self.current_step >= self.total_steps:
             self.status_label.setText("Training completed.")
 
